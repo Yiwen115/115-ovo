@@ -4,65 +4,197 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>115 帝國</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
 <style>
+/* ... (保留你原始的 CSS 樣式) ... */
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 :root {
-  --rose:#c25b5f; --rose-light:#fdeef0; --rose-mid:#f0b8bb;
-  --gold:#c49a2a; --gold-light:#fdf6e3;
-  --teal:#3a8c7c; --teal-light:#e4f4f0;
-  --bg:#fdf8f7; --surface:#fff; --border:rgba(0,0,0,0.07);
-  --text:#3a2a2a; --muted:#9a8585; --shadow:0 4px 20px rgba(194,91,95,0.09);
+  --rose: #c0565a; --rose-light: #f9eaeb; --rose-mid: #e8b4b6; --gold: #b5882a;
+  --gold-light: #fdf5e4; --teal: #2a7a6b; --teal-light: #e3f4f0; --bg: #fdf8f5;
+  --surface: #ffffff; --border: rgba(0,0,0,0.08); --text: #2a1f1f;
+  --text-muted: #8a7070; --shadow: 0 2px 16px rgba(192,86,90,0.08);
 }
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-html,body{font-family:'Noto Sans TC','Microsoft JhengHei',sans-serif;background:var(--bg);color:var(--text);display:flex;justify-content:center;}
-.app{width:100%;max-width:500px;min-height:100vh;background:var(--surface);box-shadow:0 0 40px rgba(194,91,95,0.08);padding-bottom:32px;}
+html, body { height: 100%; }
+body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--text); overflow-x: hidden; }
+#loadScreen { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; transition: opacity 0.5s; }
+.load-crown { font-size: 48px; animation: bobble 1.5s ease-in-out infinite; }
+@keyframes bobble { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+.load-text { font-family: 'Noto Serif TC', serif; font-size: 20px; color: var(--rose); margin-top: 12px; letter-spacing: 3px; }
+.load-sub { font-size: 11px; color: var(--text-muted); margin-top: 6px; letter-spacing: 2px; }
+#app { max-width: 440px; margin: 0 auto; min-height: 100vh; position: relative; }
+#loginPage { display: flex; flex-direction: column; justify-content: center; min-height: 100vh; padding: 32px 24px; }
+.login-header { text-align: center; margin-bottom: 36px; }
+.login-crown { font-size: 52px; display: block; margin-bottom: 12px; }
+.login-title { font-family: 'Noto Serif TC', serif; font-size: 26px; color: var(--rose); letter-spacing: 2px; }
+.login-sub { font-size: 11px; color: var(--text-muted); letter-spacing: 3px; margin-top: 4px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 20px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.field-label { font-size: 11px; color: var(--text-muted); font-weight: 500; letter-spacing: 1px; margin-bottom: 6px; display: block; }
+select, input { width: 100%; padding: 11px 14px; border: 1px solid var(--border); border-radius: 12px; font-size: 14px; background: var(--bg); outline: none; }
+.btn { display: block; width: 100%; padding: 13px; border-radius: 14px; border: none; cursor: pointer; font-size: 14px; font-weight: 700; transition: all 0.2s; }
+.btn-rose { background: var(--rose); color: white; margin-top: 14px; }
+#mainPage { display: none; padding: 0 16px 100px; }
+.top-bar { display: flex; align-items: center; justify-content: space-between; padding: 20px 4px 12px; }
+.top-bar-title { font-family: 'Noto Serif TC', serif; font-size: 18px; color: var(--rose); }
+.days-pill { background: var(--rose-light); color: var(--rose); border: 1px solid var(--rose-mid); border-radius: 20px; padding: 4px 12px; font-size: 11px; font-weight: 700; }
+.mood-card { background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; box-shadow: var(--shadow); }
+.mood-avatar { width: 62px; height: 62px; border-radius: 50%; background: var(--rose-light); border: 2px solid var(--rose-mid); display: flex; align-items: center; justify-content: center; font-size: 30px; margin: 0 auto 6px; }
+.hearts-card { background: linear-gradient(135deg, #fdf0f0 0%, #fff8f0 100%); border: 1px solid var(--rose-mid); border-radius: 24px; padding: 20px 24px; text-align: center; margin-bottom: 12px; }
+.hearts-val { font-family: 'Noto Serif TC', serif; font-size: 56px; color: var(--rose); font-weight: 700; display: block; }
+.nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 440px; background: rgba(255,255,255,0.95); backdrop-filter: blur(16px); border-top: 1px solid var(--border); display: flex; justify-content: space-around; padding: 8px 0 16px; z-index: 200; }
+.nav-item { cursor: pointer; text-align: center; color: var(--text-muted); font-size: 10px; }
+.nav-item.active { color: var(--rose); }
+.page { display: none; }
+.page.active { display: block; }
+#toast { position: fixed; top: -60px; left: 50%; transform: translateX(-50%); background: rgba(42,31,31,0.88); color: white; padding: 10px 24px; border-radius: 30px; font-size: 13px; z-index: 9998; transition: top 0.4s; }
+#toast.show { top: 20px; }
+</style>
+</head>
+<body>
 
-/* LOGIN */
-.login-wrap{display:flex;flex-direction:column;align-items:center;padding:50px 28px 40px;}
-.login-logo{width:110px;height:110px;border-radius:50%;object-fit:cover;border:3px solid var(--rose-mid);box-shadow:0 4px 20px rgba(194,91,95,0.2);margin-bottom:14px;animation:float 3s ease-in-out infinite;}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
-.login-title{font-family:'Noto Serif TC',serif;font-size:26px;color:var(--rose);letter-spacing:3px;margin-bottom:4px;}
-.login-sub{font-size:11px;color:var(--muted);letter-spacing:3px;margin-bottom:28px;}
-.login-wrap select,.login-wrap input{width:100%;padding:12px 16px;margin:5px 0;border-radius:14px;border:1px solid var(--border);font-size:14px;font-family:inherit;background:var(--bg);color:var(--text);outline:none;transition:border-color .2s;}
-.login-wrap input:focus,.login-wrap select:focus{border-color:var(--rose-mid);}
-.login-btn{width:100%;margin-top:16px;padding:14px;border-radius:50px;border:none;background:var(--rose);color:white;font-size:16px;font-family:inherit;font-weight:700;cursor:pointer;letter-spacing:1px;transition:opacity .2s;}
-.login-btn:hover{opacity:.9;}
-.disclaimer{background:#fafafa;border-radius:16px;padding:16px 18px;margin-top:24px;font-size:11px;color:#bbb;border:1px dashed #eee;line-height:1.9;width:100%;}
-.footer-txt{font-size:11px;color:#ddd;margin-top:16px;}
+<div id="loadScreen">
+  <div class="load-crown">👑</div>
+  <div class="load-text">115 帝國</div>
+  <div class="load-sub">ROYAL CLOUD SYSTEM</div>
+</div>
 
-/* HEADER */
-.header{padding:18px 20px 10px;display:flex;justify-content:space-between;align-items:center;}
-.greeting{font-size:13px;color:var(--muted);}
-.coins{font-size:18px;font-weight:700;color:var(--rose);font-family:'Noto Serif TC',serif;}
-.coins small{font-size:13px;font-weight:400;color:var(--muted);margin-left:4px;}
-.logout-btn{background:none;border:none;color:#ccc;font-size:12px;cursor:pointer;font-family:inherit;}
+<div id="app">
+  <div id="toast">通知</div>
 
-/* CONNECT */
-.connect-card{margin:0 15px 10px;border-radius:20px;padding:16px 18px;background:var(--rose-light);border:1px solid var(--rose-mid);}
-.connect-card p{font-size:13px;margin:0 0 4px;}
-.code-val{color:var(--rose);font-weight:700;font-size:15px;letter-spacing:2px;}
-.connected-badge{font-size:13px;font-weight:700;color:var(--rose);margin-top:6px;display:none;}
+  <div id="loginPage">
+    <div class="login-header">
+      <span class="login-crown">👑</span>
+      <div class="login-title">115 帝國</div>
+      <div class="login-sub">ROYAL CLOUD SYSTEM</div>
+    </div>
+    <div class="card">
+      <label class="field-label">身份選擇</label>
+      <select id="roleSelect">
+        <option value="king">115大王 👑</option>
+        <option value="dog">林承承小狗 🐶</option>
+      </select>
+      <label class="field-label" style="margin-top:12px">通行密碼</label>
+      <input type="password" id="pwdInput" placeholder="輸入密碼">
+      <button class="btn btn-rose" onclick="doLogin()">認證並進入帝國</button>
+    </div>
+  </div>
 
-/* NAV */
-nav{display:flex;justify-content:space-around;border-bottom:1px solid var(--border);background:white;position:sticky;top:0;z-index:20;}
-nav span{padding:13px 6px 10px;cursor:pointer;color:#bbb;font-size:13px;font-weight:500;border-bottom:3px solid transparent;transition:all .15s;}
-nav span.active{color:var(--rose);border-bottom-color:var(--rose);}
-.nav-disabled{opacity:.3;pointer-events:none;}
+  <div id="mainPage">
+    <div class="top-bar">
+      <div class="top-bar-title">115 帝國</div>
+      <div class="days-pill" id="daysPill">相愛 ... 天</div>
+    </div>
 
-/* CARD */
-.card{padding:20px;margin:14px 15px;border-radius:20px;background:white;box-shadow:var(--shadow);border:1px solid var(--border);}
-.card h4{font-size:14px;font-weight:700;margin-bottom:14px;color:var(--text);}
-.card input{width:100%;padding:10px 14px;margin:5px 0;border-radius:12px;border:1px solid var(--border);font-size:13px;font-family:inherit;background:var(--bg);color:var(--text);outline:none;}
-.card input:focus{border-color:var(--rose-mid);}
+    <div class="mood-card">
+      <div style="text-align:center;flex:1">
+        <div class="mood-avatar"><span id="moodKing">👑</span></div>
+        <div style="font-size:11px;color:var(--text-muted)">大王</div>
+      </div>
+      <div style="color:var(--rose-mid);font-size:22px">♡</div>
+      <div style="text-align:center;flex:1">
+        <div class="mood-avatar"><span id="moodDog">🐶</span></div>
+        <div style="font-size:11px;color:var(--text-muted)">小狗</div>
+      </div>
+    </div>
 
-/* BUTTONS */
-.btn{background:var(--rose);color:white;border:none;padding:11px 16px;border-radius:50px;cursor:pointer;font-size:14px;font-family:inherit;font-weight:700;transition:opacity .2s;}
-.btn:active{transform:scale(.96);}
-.btn-full{display:block;width:100%;margin-top:10px;padding:12px;border-radius:14px;}
-.btn-sm{padding:6px 14px;font-size:12px;border-radius:50px;}
-.btn-gold{background:var(--gold);}
-.btn-teal{background:var(--teal);}
-.btn-soft{background:#f0f0f0;color:#999;}
+    <div class="hearts-card">
+      <div style="font-size:11px;color:var(--text-muted)">林承承小狗 愛心存摺</div>
+      <span class="hearts-val" id="heartVal">—</span>
+      <div id="lastLog" style="font-size:11px;color:var(--text-muted)">同步中...</div>
+    </div>
+
+    <div id="page-home" class="page active">
+        <div id="kingSection" style="display:none">
+            <button class="btn btn-rose" onclick="adjustHearts(10, '獎勵')">手動+10愛心</button>
+        </div>
+        <div id="dogSection" style="display:none">
+            <button class="btn btn-rose" onclick="directApply('倒水', 5)">申請倒水點數</button>
+        </div>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-item active" onclick="switchTab('home')">🏠帝國</div>
+      <div class="nav-item" onclick="doLogout()">↩退出</div>
+    </nav>
+  </div>
+</div>
+
+<script>
+// 修正後的 Firebase 設定
+const firebaseConfig = {
+  apiKey: "AIzaSyBgjXaz5zubI3iGUsuQNLrhs-rpuzDSc8E",
+  authDomain: "ovo-8c829.firebaseapp.com",
+  databaseURL: "https://ovo-8c829-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "ovo-8c829",
+  storageBucket: "ovo-8c829.firebasestorage.app",
+  messagingSenderId: "1011404122737",
+  appId: "1:1011404122737:web:c66ed56f7df63d1f4989d0"
+};
+
+const PASSWORDS = { king: '115king', dog: '520115' };
+const START_DATE = new Date('2024-08-10');
+
+// 初始化 Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const empireRef = (path) => db.ref('empire115/' + path);
+
+let role = null;
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+function doLogin() {
+  const r = document.getElementById('roleSelect').value;
+  const p = document.getElementById('pwdInput').value;
+  if (p !== PASSWORDS[r]) { toast('密碼錯誤！'); return; }
+  
+  role = r;
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('mainPage').style.display = 'block';
+  
+  const diff = Math.floor((Date.now() - START_DATE.getTime()) / 86400000);
+  document.getElementById('daysPill').textContent = '相愛 ' + diff + ' 天';
+
+  if (role === 'king') document.getElementById('kingSection').style.display = 'block';
+  else document.getElementById('dogSection').style.display = 'block';
+
+  startSync();
+}
+
+function startSync() {
+  // 同步愛心點數
+  empireRef('hearts').on('value', snap => {
+    document.getElementById('heartVal').textContent = snap.val() || 0;
+  });
+
+  // 同步心情
+  empireRef('mood/king').on('value', snap => document.getElementById('moodKing').textContent = snap.val() || '👑');
+  empireRef('mood/dog').on('value', snap => document.getElementById('moodDog').textContent = snap.val() || '🐶');
+}
+
+function adjustHearts(val, reason) {
+  empireRef('hearts').transaction(curr => (curr || 0) + val);
+  toast('已調整點數');
+}
+
+function doLogout() { location.reload(); }
+function switchTab(t) { toast('切換至 ' + t); }
+
+// 移除載入畫面
+window.addEventListener('load', () => {
+  setTimeout(() => { document.getElementById('loadScreen').style.opacity = '0'; 
+  setTimeout(() => document.getElementById('loadScreen').style.display = 'none', 500); }, 1000);
+});
+</script>
+</body>
+</html>
 .btn-del{background:none;border:none;color:#ccc;font-size:11px;cursor:pointer;padding:2px 6px;border-radius:6px;margin-left:4px;}
 .btn-del:hover{background:#fee;color:var(--rose);}
 
