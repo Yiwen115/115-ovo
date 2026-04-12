@@ -225,7 +225,12 @@ async function syncFromServer() {
   if (!GAS_URL) return;
   try {
     // 向 GAS 發送 GET 請求取得最新使用者資料
-    const res = await fetch(GAS_URL + "?role=" + CU.role);
+    const res = await fetch(GAS_URL + "?role=" + CU.role, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
     const data = await res.json();
     
     if (data.hearts !== undefined) {
@@ -251,15 +256,23 @@ async function cloudAction(change, reason, note) {
 
   try {
     // 使用 POST 傳送資料給 GAS
-    await fetch(GAS_URL, {
+    const res = await fetch(GAS_URL, {
       method: "POST",
+      headers: {
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify(data)
     });
+    
+    if (!res.ok) {
+      throw new Error('GAS 同步失敗: ' + res.status);
+    }
     
     // 傳送成功後，稍微延遲一下再從雲端抓取最新資料回本地，確保 UI 同步
     setTimeout(syncFromServer, 1500);
   } catch (e) {
     console.error("GAS 同步失敗:", e);
+    toast("⚠ 雲端同步失敗，請稍後重試");
   }
 }
 
