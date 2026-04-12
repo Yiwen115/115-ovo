@@ -397,6 +397,8 @@ function enterEmpire(){
   buildNav();
   goTab(TABS[CU.role][0].id);
   toast("歡迎進入 115 帝國！");
+  // 登入後立即同步一次雲端資料
+  setTimeout(syncFromServer, 500);
 }
 
 function updHd(){
@@ -609,8 +611,8 @@ if(ses&&ACC[ses]){CU=ACC[ses];enterEmpire();}
 // ──  網頁載入後自動執行同步 ──
 (function init() {
   // 若已登入（CU 存在），立即從雲端抜取最新狀態
-  if (CU) {
-    setTimeout(syncFromServer, 300);
+  if (typeof CU !== 'undefined' && CU) {
+    setTimeout(syncFromServer, 500);  // 延長到 500ms 確保 CU 已定義
   }
 })();
 
