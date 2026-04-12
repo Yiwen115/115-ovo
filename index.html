@@ -249,10 +249,10 @@ async function syncFromServer() {
 
 // 2. 傳送動作到雲端 (愛心異動/任務/兌換)
 async function cloudAction(change, reason, note) {
-  if(!window.CU || !window.GAS_URL) return;
+  if(!CU || !GAS_URL) return;
 
   const data = {
-    role: window.CU.role,
+    role: CU.role,
     change: change,
     reason: reason,
     note: note || ""
@@ -260,7 +260,7 @@ async function cloudAction(change, reason, note) {
 
   try {
     // 使用 POST 傳送資料給 GAS
-    const res = await fetch(window.GAS_URL, {
+    const res = await fetch(GAS_URL, {
       method: "POST",
       headers: {
         'Content-Type': 'application/json'
@@ -273,9 +273,7 @@ async function cloudAction(change, reason, note) {
     }
     
     // 傳送成功後，稍微延遲一下再從雲端抓取最新資料回本地，確保 UI 同步
-    setTimeout(function() {
-      if (window.syncFromServer) window.syncFromServer();
-    }, 1500);
+    setTimeout(syncFromServer, 1500);
   } catch (e) {
     console.error("GAS 同步失敗:", e);
     toast("⚠ 雲端同步失敗，請稍後重試");
