@@ -215,39 +215,35 @@ hr{border:none;border-top:1px solid var(--faint);margin:14px 0;}
 // --- 核心同步設定 ---
 const GAS_URL = "https://script.google.com/macros/s/AKfycbwETu3YB8iJ5--SjqRiOavHVnEGR9y3GPoqOZ0n_0WK-r1wt027BBkC3IbWjgA0w3p9aQ/exec";
 
-// 輔助函數：讀寫本機暫存（用於介面即時渲染）
-function sg(k){ try{return JSON.parse(localStorage.getItem("115_"+k));}catch(e){return localStorage.getItem("115_"+k);} }
-function ss(k,v){ localStorage.setItem("115_"+k, typeof v==='object'?JSON.stringify(v):v); }
+// 註：storage 函數定義已移至下方統一管理（第 358 行），避免重複定義
 
 // 顯示讀取狀態
 function showLoading(b){ document.getElementById('sync-loading').style.display = b?'flex':'none'; }
 
 // 1. 從雲端抜取資料
 async function syncFromServer() {
-  const role = new URLSearchParams(window.location.search).get("role") || sg("role") || "dog";
   if (!GAS_URL) return;
   try {
-    // 向 GAS 發送 GET 請求取得最新資料
-    const res = await fetch(GAS_URL + "?role=" + role);
+    // 向 GAS 發送 GET 請求取得最新使用者資料
+    const res = await fetch(GAS_URL + "?role=" + CU.role);
     const data = await res.json();
     
     if (data.hearts !== undefined) {
       ss("hearts", data.hearts); // 更新本地愛心
       if (data.logs) ss("logs", data.logs); // 更新本地紀錄
-      render(); // 重新渲柣畫面
+      goTab(sg("tab") || TABS[CU.role][0].id); // 重新渲染當前頁籤
     }
   } catch (e) {
-    console.error("同步失敗:", e);
+    console.error("GAS 同步失敗:", e);
   }
 }
 
 // 2. 傳送動作到雲端 (愛心異動/任務/兌換)
 async function cloudAction(change, reason, note) {
-  const role = sg("role");
-  if(!role || !GAS_URL) return;
+  if(!CU || !GAS_URL) return;
 
   const data = {
-    role: role,
+    role: CU.role,
     change: change,
     reason: reason,
     note: note || ""
@@ -261,9 +257,9 @@ async function cloudAction(change, reason, note) {
     });
     
     // 傳送成功後，稍微延遲一下再從雲端抓取最新資料回本地，確保 UI 同步
-    setTimeout(syncFromServer, 1000);
+    setTimeout(syncFromServer, 1500);
   } catch (e) {
-    console.error("雲端同步失敗:", e);
+    console.error("GAS 同步失敗:", e);
   }
 }
 
@@ -294,16 +290,7 @@ window.doTask = function(ti, p) {
   render();
 };
 
-// 5. 登入邏輯
-window.login = function() {
-  var r = document.getElementById('rs').value;
-  var p = document.getElementById('pw').value;
-  if(!p){ toast("請輸入口令"); return; }
-  
-  // 登入後先儲存身分，再進行第一次同步
-  ss("role", r);
-  syncFromServer();
-};
+
 
 // --- 下方為您原始的介面渲染邏輯 (Render)，內容均不變，僅確保讀取來源為 sg() ---
 
@@ -579,11 +566,14 @@ window.delTpl=function(id){
 };
 window.subTask=function(n,p){
   var arr=sg("tasks")||[];arr.push({id:Date.now(),n:n,p:p,st:"pending",t:Date.now()});ss("tasks",arr);
+  // 同步申報到 GAS
+  cloudAction(p, "申報任務", n);
   toast("奏折已呈遞！");goTab("report");
 };
 window.dirSub=function(){
-  var n=document.getElementById("dn").value.trim();var p=parseInt(document.getElementById("dp2").value);
-  if(!n||isNaN(p)){toast("請填寫完整");return;}
+  var n=document.getElementById("dn").value.trim();
+  var p=parseInt(document.getElementById("dp2").value);
+  if(!n||isNaN(p)||p<=0){toast("請填寫完整資訊");return;}
   subTask(n,p);
 };
 
@@ -605,13 +595,7 @@ function rShop(){
   }).join("") : "<div class=\"empty\"><span class=\"empty-i\">🎁</span>大王尚未設定禮物</div>";
   return "<div class=\"sec-lbl\">寶庫兌換</div><div style=\"padding:0 16px\">"+list+"</div><div class=\"card\" style=\"background:var(--rose-l);border-color:var(--rose-m);margin-top:8px\"><div style=\"font-size:13px;color:var(--rose-d)\">目前愛心：<b style=\"font-size:22px;font-family:&quot;Noto Serif TC&quot;,serif\">"+hearts+"</b> ❤️</div></div>";
 }
-window.redeem=function(ti,p){
-  var h=sg("hearts")||0;if(h<p){toast("愛心不足！");return;}
-  if(!confirm("花費 "+p+" 愛心兌換「"+ti+"」？"))return;
-  ss("hearts",h-p);
-  var logs=sg("logs")||[];logs.push({id:Date.now(),r:"🎁 兌換："+ti,note:"",v:-p,t:Date.now()});ss("logs",logs);
-  toast("兌換成功！記得跟大王索取 🎁");updHd();goTab("shop");
-};
+
 
 // ── utils ──
 function ft(ts){var d=new Date(ts);return(d.getMonth()+1)+"/"+d.getDate()+" "+d.getHours().toString().padStart(2,"0")+":"+d.getMinutes().toString().padStart(2,"0");}
@@ -622,13 +606,12 @@ document.getElementById("lg-img").src="data:image/jpeg;base64,"+LOGO;
 var ses=localStorage.getItem("e115_ses");
 if(ses&&ACC[ses]){CU=ACC[ses];enterEmpire();}
 
-// ──  網頁載入後自動執行 ──
+// ──  網頁載入後自動執行同步 ──
 (function init() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const role = urlParams.get("role");
-  if (role) ss("role", role); // 如果網址有帶 role，就存起來
-  
-  syncFromServer(); // 立即從雲端抜取最新狀態
+  // 若已登入（CU 存在），立即從雲端抜取最新狀態
+  if (CU) {
+    setTimeout(syncFromServer, 300);
+  }
 })();
 
 })();
