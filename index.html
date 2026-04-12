@@ -323,15 +323,6 @@ function render() {
   // 注意：在您的任務或兌換按鈕 onclick 處，確保呼叫的是上述雲端函數
 }
 
-// 初始啟動
-window.onload = function() {
-  if(sg("role")) {
-    syncFromServer();
-  } else {
-    render();
-  }
-};
-
 // 保留您的 toast, esc, toast-container 等所有工具函數
 function toast(m){ /* ... 原始代碼 ... */ }
 function esc(s){ return s.replace(/'/g, "\\'"); }
