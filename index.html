@@ -222,10 +222,14 @@ function showLoading(b){ document.getElementById('sync-loading').style.display =
 
 // 1. 從雲端抜取資料
 async function syncFromServer() {
-  if (!GAS_URL || !CU) return;  // 確保 CU 已存在
+  // 確保已經定義且不為 null
+  if (!window.GAS_URL || !window.CU) {
+    console.warn("尚未登入或 GAS 未設置，跳過同步");
+    return;
+  }
   try {
     // 向 GAS 發送 GET 請求取得最新使用者資料
-    const res = await fetch(GAS_URL + "?role=" + CU.role, {
+    const res = await fetch(window.GAS_URL + "?role=" + window.CU.role, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json'
@@ -236,7 +240,7 @@ async function syncFromServer() {
     if (data.hearts !== undefined) {
       ss("hearts", data.hearts); // 更新本地愛心
       if (data.logs) ss("logs", data.logs); // 更新本地紀錄
-      goTab(sg("tab") || TABS[CU.role][0].id); // 重新渲染當前頁籤
+      goTab(sg("tab") || TABS[window.CU.role][0].id); // 重新渲染當前頁籤
     }
   } catch (e) {
     console.error("GAS 同步失敗:", e);
@@ -245,10 +249,10 @@ async function syncFromServer() {
 
 // 2. 傳送動作到雲端 (愛心異動/任務/兌換)
 async function cloudAction(change, reason, note) {
-  if(!CU || !GAS_URL) return;
+  if(!window.CU || !window.GAS_URL) return;
 
   const data = {
-    role: CU.role,
+    role: window.CU.role,
     change: change,
     reason: reason,
     note: note || ""
@@ -256,7 +260,7 @@ async function cloudAction(change, reason, note) {
 
   try {
     // 使用 POST 傳送資料給 GAS
-    const res = await fetch(GAS_URL, {
+    const res = await fetch(window.GAS_URL, {
       method: "POST",
       headers: {
         'Content-Type': 'application/json'
@@ -269,7 +273,9 @@ async function cloudAction(change, reason, note) {
     }
     
     // 傳送成功後，稍微延遲一下再從雲端抓取最新資料回本地，確保 UI 同步
-    setTimeout(syncFromServer, 1500);
+    setTimeout(function() {
+      if (window.syncFromServer) window.syncFromServer();
+    }, 1500);
   } catch (e) {
     console.error("GAS 同步失敗:", e);
     toast("⚠ 雲端同步失敗，請稍後重試");
@@ -391,14 +397,16 @@ function enterEmpire(){
   document.getElementById("lv").style.display="none";
   document.getElementById("mv").classList.remove("hidden");
   document.getElementById("hd-av").src="data:image/jpeg;base64,"+LOGO;
-  document.getElementById("hd-nick").textContent=CU.name;
-  document.getElementById("hd-sub").textContent=CU.role==="king"?"帝國大王 👑":"帝國小狗 🐶";
+  document.getElementById("hd-nick").textContent=window.CU.name;
+  document.getElementById("hd-sub").textContent=window.CU.role==="king"?"帝國大王 👑":"帝國小狗 🐶";
   document.getElementById("out-btn").onclick=doLogout;
   buildNav();
-  goTab(TABS[CU.role][0].id);
+  goTab(TABS[window.CU.role][0].id);
   toast("歡迎進入 115 帝國！");
-  // 登入後立即同步一次雲端資料
-  setTimeout(syncFromServer, 500);
+  // 登入後立即同步一次雲端資料（延遲 800ms 確保所有變數都已初始化）
+  setTimeout(function() {
+    if (window.syncFromServer) window.syncFromServer();
+  }, 800);
 }
 
 function updHd(){
