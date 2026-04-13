@@ -296,35 +296,29 @@ function showSyncing(on){
 
 // 從 GAS 讀取 hearts & logs（GET）
 function syncFromServer(){
-  if(!CU){ return; }
+  if(!CU){ return; }   // ← 防護：CU 未定義就直接 return
   showSyncing(true);
-  // GAS GET 需要用 no-cors 的 script tag 方式，或直接用 fetch + text 解析
-  // 愛心永遠屬於小狗，無論誰登入都讀 dog 的資料
-  var url = GAS + "?role=dog&t=" + Date.now();
-  fetch(url, { method:"GET", redirect:"follow" })
-    .then(function(r){ return r.text(); })
-    .then(function(txt){
-      try {
-        // 去掉可能的 BOM 或多餘字元
-        var clean = txt.trim();
-        // GAS 有時會回傳 JSONP 包裝，嘗試直接 parse
-        var data = JSON.parse(clean);
-        if(data && data.hearts !== undefined){
-          STATE.hearts = Number(data.hearts);
-          if(data.logs && data.logs.length){ STATE.logs = data.logs; }
-          saveLocal(); updHd();
-          var activeNav = document.querySelector(".tab-nav span.active");
-          if(activeNav && activeNav.dataset.id === "log") goTab("log");
-          document.getElementById("hd-sync").textContent = "已同步 " + ft(Date.now());
+  var url = GAS + "?role=" + CU.id + "&t=" + Date.now();
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if(data && data.hearts !== undefined){
+        STATE.hearts = Number(data.hearts);
+        if(data.logs && data.logs.length){
+          // 合併：雲端 logs 優先，補上本地尚未同步的
+          STATE.logs = data.logs;
         }
-      } catch(pe){
-        console.warn("同步 parse 失敗:", pe, "原始回應:", txt.slice(0,100));
-        document.getElementById("hd-sync").textContent = "同步異常";
+        saveLocal();
+        updHd();
+        // 如果目前在紀錄頁就重繪
+        var activeNav = document.querySelector(".tab-nav span.active");
+        if(activeNav && activeNav.dataset.id === "log") goTab("log");
+        document.getElementById("hd-sync").textContent = "已同步 " + ft(Date.now());
       }
       showSyncing(false);
     })
     .catch(function(err){
-      console.warn("同步連線失敗:", err);
+      console.warn("同步失敗:", err);
       showSyncing(false);
       document.getElementById("hd-sync").textContent = "離線模式";
     });
@@ -334,38 +328,150 @@ function syncFromServer(){
 function cloudAction(change, reason, note){
   if(!CU){ return Promise.resolve({success:false}); }
   note = note || "";
-  // 先本地更新，保證 UI 即時響應
-  STATE.hearts += Number(change);
-  STATE.logs.unshift({id:Date.now(), r:reason, note:note, v:Number(change), t:Date.now()});
-  saveLocal(); updHd();
-  // GAS POST：用 text/plain 避免 preflight CORS 問題
   return fetch(GAS, {
     method: "POST",
-    headers: {"Content-Type":"text/plain"},
-    // 愛心永遠屬於小狗，所有增減都寫入 dog
-    body: JSON.stringify({ role: "dog", change: Number(change), reason: reason, note: note })
+    headers: {"Content-Type":"text/plain"},   // GAS 需要 text/plain 避免 CORS preflight
+    body: JSON.stringify({ role: CU.id, change: change, reason: reason, note: note })
   })
-  .then(function(r){ return r.text(); })
-  .then(function(txt){
-    try {
-      var data = JSON.parse(txt.trim());
-      if(data && data.hearts !== undefined){
-        STATE.hearts = Number(data.hearts);
-        saveLocal(); updHd();
-      }
-      return {success:true};
-    } catch(e){
-      // GAS 有時回傳非 JSON 文字（如 "成功"），視為成功
-      console.log("GAS 回應:", txt.slice(0,80));
-      return {success:true, raw:txt};
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data && data.hearts !== undefined){
+      STATE.hearts = Number(data.hearts);
+      saveLocal(); updHd();
     }
+    return data;
   })
   .catch(function(err){
-    console.warn("cloudAction 連線失敗（已離線儲存）:", err);
+    console.warn("cloudAction 失敗:", err);
+    // 離線：本地先記
+    STATE.hearts += Number(change);
+    STATE.logs.unshift({id:Date.now(), r:reason, note:note, v:Number(change), t:Date.now()});
+    saveLocal(); updHd();
     return {success:false, offline:true};
   });
 }
 
+/* ══════════════════════════════════════
+   Login / Logout
+══════════════════════════════════════ */
+document.getElementById("login-btn").addEventListener("click", doLogin);
+document.getElementById("pw").addEventListener("keydown", function(e){
+  if(e.key==="Enter") doLogin();
+});
+
+function doLogin(){
+  var rk = document.getElementById("rs").value;
+  var pw = document.getElementById("pw").value;
+  if(!pw){ toast("請輸入密碼"); return; }
+  var acc = ACC[rk];
+  if(!acc || pw !== acc.pw){ toast("密碼錯誤！"); return; }
+  CU = acc;
+  localStorage.setItem("e115_ses", rk);
+  enterEmpire();
+}
+
+function doLogout(){
+  CU = null;
+  localStorage.removeItem("e115_ses");
+  document.getElementById("mv").classList.add("hidden");
+  document.getElementById("lv").style.display = "flex";
+  document.getElementById("pw").value = "";
+}
+
+function enterEmpire(){
+  loadLocal();
+  document.getElementById("lv").style.display = "none";
+  document.getElementById("mv").classList.remove("hidden");
+  document.getElementById("hd-av").src = "data:image/jpeg;base64," + LOGO;
+  document.getElementById("hd-nick").textContent = CU.name;
+  document.getElementById("hd-sub").textContent = CU.role==="king" ? "帝國大王 👑" : "帝國小狗 🐶";
+  document.getElementById("out-btn").onclick = doLogout;
+  buildNav();
+  goTab(TABS[CU.role][0].id);
+  // 登入後立即從雲端拉資料
+  syncFromServer();
+  // 每 30 秒自動同步一次
+  setInterval(syncFromServer, 30000);
+  toast("歡迎進入 115 帝國！");
+}
+
+function updHd(){
+  document.getElementById("hd-h").textContent = STATE.hearts;
+}
+
+/* ══════════════════════════════════════
+   Nav & Tab
+══════════════════════════════════════ */
+function buildNav(){
+  var nav = document.getElementById("tnav");
+  nav.innerHTML = TABS[CU.role].map(function(t){
+    return '<span id="n-'+t.id+'" data-id="'+t.id+'">'+t.label+'</span>';
+  }).join("");
+  nav.querySelectorAll("span").forEach(function(s){
+    s.addEventListener("click", function(){ goTab(s.dataset.id); });
+  });
+}
+function goTab(id){
+  document.querySelectorAll(".tab-nav span").forEach(function(s){ s.classList.remove("active"); });
+  var el = document.getElementById("n-"+id);
+  if(el) el.classList.add("active");
+  document.getElementById("tbody").innerHTML = renderTab(id);
+  updHd();
+}
+function renderTab(id){
+  var fns = {edict:rEdict, audit:rAudit, vault:rVault, deduct:rDeduct, log:rLog,
+             report:rReport, edview:rEdview, shop:rShop};
+  return fns[id] ? fns[id]() : "";
+}
+
+/* ══════════════════════════════════════
+   📜 諭旨發布 (King)
+══════════════════════════════════════ */
+function rEdict(){
+  var edicts = STATE.edicts;
+  var list = edicts.length ? edicts.slice().reverse().map(function(e){
+    return '<div class="edict"><div class="edict-name">'+e.n+'</div><div class="edict-pts">獎勵 +'+e.p+' 愛心</div>'
+      +'<div class="edict-foot"><button class="btn b-ghost b-xs" onclick="delEdict('+e.id+')">✕ 撤回</button></div></div>';
+  }).join("") : '<div class="empty"><span class="empty-i">📜</span>尚無諭旨</div>';
+  return '<div class="card"><div class="card-t">📜 頒布新諭旨</div>'
+    +'<input class="inp" id="en" placeholder="任務名稱">'
+    +'<div class="irow"><input class="inp" id="ep" type="number" placeholder="獎勵愛心">'
+    +'<button class="btn b-gold b-sm" onclick="postEdict()">頒布</button></div></div>'
+    +'<div class="sec-lbl">現行諭旨</div><div style="padding:0 16px">'+list+'</div>';
+}
+window.postEdict = function(){
+  var n = document.getElementById("en").value.trim();
+  var p = parseInt(document.getElementById("ep").value);
+  if(!n || isNaN(p)){ toast("請填寫完整"); return; }
+  STATE.edicts.push({id:Date.now(), n:n, p:p});
+  saveLocal(); toast("諭旨已頒布！"); goTab("edict");
+};
+window.delEdict = function(id){
+  if(!confirm("確定撤回此諭旨？")) return;
+  STATE.edicts = STATE.edicts.filter(function(e){ return e.id !== id; });
+  saveLocal(); toast("諭旨已撤回"); goTab("edict");
+};
+
+/* ══════════════════════════════════════
+   ⚖ 奏折審核 (King) — 可調整點數，同步雲端
+══════════════════════════════════════ */
+function rAudit(){
+  var tasks = STATE.tasks.filter(function(t){ return t.st==="pending"; }).reverse();
+  var html = tasks.length ? tasks.map(function(t){
+    return '<div class="li" id="ti-'+t.id+'">'
+      +'<div class="li-m"><div class="li-name">'+t.n+'</div>'
+      +'<div class="li-sub">申請 '+t.p+' 愛心・'+ft(t.t)+'</div></div>'
+      +'<div class="li-r"><div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px">'
+      +'<div class="adj-row"><span style="font-size:11px;color:var(--muted)">實給</span>'
+      +'<input class="adj-inp" id="adj-'+t.id+'" type="number" value="'+t.p+'">'
+      +'<span style="font-size:11px;color:var(--muted)">愛心</span></div>'
+      +'<div style="display:flex;gap:6px">'
+      +'<button class="btn b-teal b-xs" onclick="auditT('+t.id+',true)">准奏</button>'
+      +'<button class="btn b-danger b-xs" onclick="auditT('+t.id+',false)">駁回</button>'
+      +'</div></div></div></div>';
+  }).join("") : '<div class="empty"><span class="empty-i">⚖</span>暫無待審奏折</div>';
+  return '<div class="card"><div class="card-t">⚖ 待審奏折（可調整實際愛心）</div>'+html+'</div>';
+}
 window.auditT = function(id, pass){
   var idx = STATE.tasks.findIndex(function(t){ return t.id===id; });
   if(idx < 0) return;
@@ -379,9 +485,12 @@ window.auditT = function(id, pass){
   STATE.tasks[idx].actual = actual;
   if(pass){
     STATE.apc++;
-    ss("apc", STATE.apc);
     var reason = "准奏：" + t.n + (actual !== t.p ? "（調整為"+actual+"）" : "");
-    // cloudAction 內部已處理本地更新 + 雲端同步
+    // 先本地更新
+    STATE.hearts += actual;
+    STATE.logs.unshift({id:Date.now(), r:reason, note:"", v:actual, t:Date.now()});
+    saveLocal(); updHd();
+    // 再同步雲端（小狗那邊的角色是 dog）
     cloudAction(actual, reason, "").then(function(){
       toast("🎉 准奏！「"+t.n+"」+"+actual+" 愛心");
     });
